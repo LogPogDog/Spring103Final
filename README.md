@@ -21,6 +21,7 @@ Inputs
 Buttons: Both buttons provide similar functionality. In-game, the buttons are solely used for presses. Left button inputs a “left press,” while right button inputs a “right press.”
 
 Outputs
+
 LEDS: Lights are crucial to this game since they provide indicators of when to press which buttons. Blue LEDS represent upcoming notes, Red represents a "miss," Yellow represents "okay," and Green represents "great."
 Sound: Sound is also crucial. Spoken scores will be used at the end of the game, and otherwise sound is used for the song component of the game.
 PrintOuts: The player can view their score changing in real time with the serial monitor. Every button press modifies the score, and it will print "GREAT!", "Okay!", or "Miss!" depending on the press.
