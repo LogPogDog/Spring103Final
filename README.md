@@ -1,4 +1,4 @@
-# Spring103Final
+# Spring103Final - Logan McClure
 
 Dependencies:
 
