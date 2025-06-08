@@ -12,21 +12,29 @@ int A_four = 440;
 //variable to keep track of the meter
 int meter = 0;
 
-//Delays for each category of difficulty and the meter
+//Delays for each category of difficulty and the meter. The offset delays are used for starting the actual delays.
 AsyncDelay meterDelay;
 AsyncDelay RGREATDelay;
 AsyncDelay ROKAYDelay;
 AsyncDelay LGREATDelay;
 AsyncDelay LOKAYDelay;
 
+AsyncDelay RGREAToffset;
+AsyncDelay ROKAYoffset;
+AsyncDelay LGREAToffset;
+AsyncDelay LOKAYoffset;
+
+//Bools to keep track of whether offset delays have started or not
+bool RGREATflag = 0;
+bool ROKAYflag = 0;
+bool LGREATflag = 0;
+bool LOKAYflag = 0;
+
 //INTERRUPTS
-const int switchPin = 7;
 const int LeftButton = 4;
 const int RightButton = 5;
 volatile bool lbuttonFlag = 0;
 volatile bool rbuttonFlag = 0;
-volatile bool switchFlag = 0;
-bool switchState;
 
 //Global variable for user score and the value of each hit
 int score = 0;
@@ -36,11 +44,6 @@ const int miss = 100;
 
 //Array to keep track of which pixels are on during the game
 bool litPixels[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-//switch interrupt sets flag to true
-void switchISR() {
-  switchFlag = 1;
-}
 
 //interrupt functions set flag to true, which cancels all for loops in the five functions, and then change value of mode control up or down
 
@@ -1233,50 +1236,45 @@ void setup(void) {
 
   CircuitPlayground.begin();
   //INTERRUPTS
-  pinMode(switchPin, INPUT_PULLUP);  // Switch pin with pullup enabled
   pinMode(LeftButton, INPUT_PULLDOWN); // Left button, pulldown enabled
   pinMode(RightButton, INPUT_PULLDOWN); // Right button, pulldown enabled
   attachInterrupt(digitalPinToInterrupt(LeftButton), lbuttonISR, FALLING); 
   attachInterrupt(digitalPinToInterrupt(RightButton), rbuttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(switchPin), switchISR, CHANGE); 
 
   //Run this function to create the MIDI array from frequencies
   generateMIDI();
 
   //Run these functions to define the difficulty arrays
-  defineEasy();
-  defineHard();
   defineDemon();
 
   Serial.begin(9600);
   Serial.println("Loading...");
   while(!Serial); // Pause program till serial opens
 
-  switchState = digitalRead(switchPin);
-
   //Start and expire the METER, GREAT and OKAY Delays for future usage. Song is 144 bpm, which gives 2304 sixteenth notes per minute, so 38.4 notes per second, so notes are about 26 ms long. To make it easier, however, 50 ms meter will be used for 16 notes.
-  //meterDelay.start(60, AsyncDelay::MILLIS);
   meterDelay.start(110, AsyncDelay::MILLIS); //Add 50 ms since the playTone function actually delays twice for 50 ms
-  RGREATDelay.start(120, AsyncDelay::MILLIS);
-  ROKAYDelay.start(360, AsyncDelay::MILLIS);
-  LGREATDelay.start(120, AsyncDelay::MILLIS);
-  LOKAYDelay.start(360, AsyncDelay::MILLIS);
+  //meterDelay.start(2, AsyncDelay::MILLIS); //THIS IS FOR DEBUGGING SPEECH
+  RGREATDelay.start(110, AsyncDelay::MILLIS); //This is +/- 55 ms leniency
+  ROKAYDelay.start(220, AsyncDelay::MILLIS); //This is +/- 110 ms leniency
+  LGREATDelay.start(110, AsyncDelay::MILLIS);
+  LOKAYDelay.start(220, AsyncDelay::MILLIS);
+  RGREAToffset.start(55, AsyncDelay::MILLIS); //This begins the beat before a note, so RGREATDelay will start 55ms before the actual beat.
+  ROKAYoffset.start(220, AsyncDelay::MILLIS); //This begins 3 beats in advance, so ROKAYDelay will start 110 ms before the actual beat.
+  LGREAToffset.start(55, AsyncDelay::MILLIS); //This begins the beat before a note, so LGREATDelay will start 55ms before the actual beat.
+  LOKAYoffset.start(220, AsyncDelay::MILLIS); //This begins 3 beats in advance, so LOKAYDelay will start 110 ms before the actual beat.
   meterDelay.expire();
   RGREATDelay.expire();
   ROKAYDelay.expire();
   LGREATDelay.expire();
   LOKAYDelay.expire();
+  RGREAToffset.expire();
+  ROKAYoffset.expire();
+  LGREAToffset.expire();
+  LOKAYoffset.expire();
 }
 
 void loop(void)
 {
-  //Check switchState if switchFlag
-  if (switchFlag) {
-    delay(5);
-    switchState = digitalRead(switchPin);
-    switchFlag = 0;
-  }
-
   //Check if right button has been pressed. If so, continue checks to assign points.
   if (rbuttonFlag) {
 
@@ -1286,15 +1284,18 @@ void loop(void)
       //Check if OKAYDelay is expired. If yes, the user missed and decrement by "miss" points. If not, assign "okay" points and expire okay delay.
       if (ROKAYDelay.isExpired()) {
         score = score - miss;
+        CircuitPlayground.setPixelColor(9, 255, 0, 0); //Set pixel color to red to indicate MISS
         Serial.println("Miss!");
       } else {
         score = score + okay;
+        CircuitPlayground.setPixelColor(9, 255, 255, 0); //Set pixel color to yellow to indicate OKAY
         ROKAYDelay.expire();
         Serial.println("Okay!");
       }
 
     } else {
       score = score + great;
+      CircuitPlayground.setPixelColor(9, 0, 255, 0); //Set pixel color to green to indicate GREAT
       RGREATDelay.expire();
       ROKAYDelay.expire();
       Serial.println("GREAT!");
@@ -1318,15 +1319,18 @@ void loop(void)
       //Check if OKAYDelay is expired. If yes, the user missed and decrement by "miss" points. If not, assign "okay" points and expire okay delay.
       if (LOKAYDelay.isExpired()) {
         score = score - miss;
+        CircuitPlayground.setPixelColor(0, 255, 0, 0); //Set pixel color to red to indicate MISS
         Serial.println("Miss!");
       } else {
         score = score + okay;
+        CircuitPlayground.setPixelColor(0, 255, 255, 0); //Set pixel color to yellow to indicate OKAY
         LOKAYDelay.expire();
         Serial.println("Okay!");
       }
 
     } else {
       score = score + great;
+      CircuitPlayground.setPixelColor(0, 0, 255, 0); //Set pixel color to green to indicate GREAT
       LGREATDelay.expire();
       LOKAYDelay.expire();
       Serial.println("GREAT!");
@@ -1341,6 +1345,27 @@ void loop(void)
 
   }
 
+  //Check each of the offset delays. If they are expired and the corresponding flag is true, start the corresponding point delay.
+  if (RGREAToffset.isExpired() && RGREATflag) {
+    RGREATDelay.restart();
+    RGREATflag = 0;
+  }
+
+  if (ROKAYoffset.isExpired() && ROKAYflag) {
+    ROKAYDelay.restart();
+    ROKAYflag = 0;
+  }
+
+  if (LGREAToffset.isExpired() && LGREATflag) {
+    LGREATDelay.restart();
+    LGREATflag = 0;
+  }
+
+  if (LOKAYoffset.isExpired() && LOKAYflag) {
+    LOKAYDelay.restart();
+    LOKAYflag = 0;
+  }
+
   //Check if meterDelay is expired. If so, increment meter by 1, "push" LEDS up by 1 on right side, and check to see if delays begin.
   if (meterDelay.isExpired() && meter < sizeof(spearOfJustice)/sizeof(int)) {
 
@@ -1350,7 +1375,7 @@ void loop(void)
     //"push" the lit pixels up by 1. First for loop pushes right side up, second for loop pushes left side up. Odd beats are red, even beats are blue.
     for (int k=9; k>5; k--) {
       if (litPixels[k-1]) {
-        CircuitPlayground.setPixelColor(k, 255, 0, 0);
+        CircuitPlayground.setPixelColor(k, 0, 0, 255);
         litPixels[k] = 1;
         litPixels[k-1] = 0;
       }
@@ -1358,7 +1383,7 @@ void loop(void)
 
     for (int k=0; k<4; k++) {
       if (litPixels[k+1]) {
-        CircuitPlayground.setPixelColor(k, 255, 0, 0);
+        CircuitPlayground.setPixelColor(k, 0, 0, 255);
         litPixels[k] = 1;
         litPixels[k+1] = 0;
       }
@@ -1366,46 +1391,47 @@ void loop(void)
 
     //RIGHT SIDE
     //If the bool 4 beats ahead of meter is true, light up the bottom right side pixel
-    if (RDemon[meter+4]) {
-      CircuitPlayground.setPixelColor(5, 255, 0, 0);
+    if (RDemon[meter+4] && meter+4 < sizeof(spearOfJustice)/sizeof(int)) {
+      CircuitPlayground.setPixelColor(5, 0, 0, 255);
       litPixels[5]=1;
     }
 
-    //If the bool 3 beats ahead of meter is true, start OKAYDelay
-    if (RDemon[meter+3]) {
-      ROKAYDelay.restart();
+    //If the bool 3 beats ahead of meter is true, start OKAYoffset
+    if (RDemon[meter+3] && meter+3 < sizeof(spearOfJustice)/sizeof(int)) {
+      ROKAYoffset.restart();
+      ROKAYflag = 1;
       //Serial.println("OKAY DELAY START");
     }
 
-    //If the bool 1 beat ahead of meter is true, start GREATDelay
-    if (RDemon[meter+1]) {
-      RGREATDelay.restart();
+    //If the bool 1 beat ahead of meter is true, start GREAToffset
+    if (RDemon[meter+1] && meter+1 < sizeof(spearOfJustice)/sizeof(int)) {
+      RGREAToffset.restart();
+      RGREATflag = 1;
       //Serial.println("GREAT DELAY START");
     }
 
     //LEFT SIDE
-    if (LDemon[meter+4]) {
-      CircuitPlayground.setPixelColor(4, 255, 0, 0);
+    if (LDemon[meter+4] && meter+4 < sizeof(spearOfJustice)/sizeof(int)) {
+      CircuitPlayground.setPixelColor(4, 0, 0, 255);
       litPixels[4]=1;
     }
 
-        //If the bool 3 beats ahead of meter is true, start OKAYDelay
-    if (LDemon[meter+3]) {
-      LOKAYDelay.restart();
-      //Serial.println("OKAY DELAY START");
+        //If the bool 3 beats ahead of meter is true, start OKAYoffset
+    if (LDemon[meter+3] && meter+3 < sizeof(spearOfJustice)/sizeof(int)) {
+      LOKAYoffset.restart();
+      LOKAYflag = 1;
     }
 
-    //If the bool 1 beat ahead of meter is true, start GREATDelay
-    if (LDemon[meter+1]) {
-      LGREATDelay.restart();
-      //Serial.println("GREAT DELAY START");
+    //If the bool 1 beat ahead of meter is true, start GREAToffset
+    if (LDemon[meter+1] && meter+1 < sizeof(spearOfJustice)/sizeof(int)) {
+      LGREAToffset.restart();
+      LGREATflag = 1;
     }
 
     //If the element is not 128, play the tone. Otherwise, keep playing the last tone played.
-    if (spearOfJustice[meter] != 128) {
+    if (spearOfJustice[meter] != 128 && meter < sizeof(spearOfJustice)/sizeof(int)) {
       //Directs the command to pin A0, which is the speaker
       noTone(A0);
-      //CircuitPlayground.playTone(midi[spearOfJustice[meter]], 50);
       tone(A0, midi[spearOfJustice[meter]]);
     }
 
@@ -1414,15 +1440,17 @@ void loop(void)
 
   } else if (meter == sizeof(spearOfJustice)/sizeof(int)) {
     noTone(A0);
+    CircuitPlayground.playTone(127, 10);
     Serial.print("FINAL SCORE: ");
     Serial.println(score);
     announce();
+    meter = ++meter;
   }
 
 }
 
 
-//Place holder function to set up speaking-related components
+//Place holder function to set up speaking-related components. All arrays obtained from Examples: SpeechDemos for CircuitPlayground Express.
 void announceSetup() {
 }
 
@@ -1520,47 +1548,47 @@ void announce() {
 
   //Say "[]] Thousand" if greater than or equal to 1000. First create a separate variable that is score%1000, then use the functions to say the first part.
   if (score >= 1000) {
-    int thousandsPlaceHolder = score%1000;
+    int thousandsPlaceHolder = score/1000;
 
     //Say "[hundredsplace] Hundred" if greater than or equal to 100
-    if (score >= 100) {
-      int hundredsplace = score/100;
+    if (thousandsPlaceHolder >= 100) {
+      int hundredsplace = thousandsPlaceHolder/100;
       CircuitPlayground.speaker.say(digits[hundredsplace]);
       CircuitPlayground.speaker.say(spHUNDRED);
 
-      //Subtract the hundreds from score for future references
-      score = score-(hundredsplace*100);
+      //Subtract the hundreds from thousandsPlaceHolder for future references
+      thousandsPlaceHolder = thousandsPlaceHolder-(hundredsplace*100);
 
       //Set off zeroFlag to indicate zero need not be said
       zeroFlag = 1;
     }
 
     //Say "[tensplace]" if greater than or equal to 20
-    if (score >= 20) {
-      int tensplace = score/10;
+    if (thousandsPlaceHolder >= 20) {
+      int tensplace = thousandsPlaceHolder/10;
       int tensplaceIndex = tensplace - 2;
       CircuitPlayground.speaker.say(beyondtens[tensplaceIndex]);
 
-      //Subtract the tens from score for future references
-      score = score-(tensplace*10);
+      //Subtract the tens from thousandsPlaceHolder for future references
+      thousandsPlaceHolder = thousandsPlaceHolder-(tensplace*10);
 
       //Set off zeroFlag to indicate zero need not be said
       zeroFlag = 1;
     }
 
     //If greater than or equal to 10, say the corresponding number. Else if zeroFlag = 1 AND sensordata is greater than or equal to 1, say the digit. Else if zeroFlag = 0, say "Zero".
-    if (score >= 10) {
-      int tensIndex = score-10;
+    if (thousandsPlaceHolder >= 10) {
+      int tensIndex = thousandsPlaceHolder-10;
       CircuitPlayground.speaker.say(tens[tensIndex]);
-    } else if (score >= 1) {
-      int roundedData = score/1;
+    } else if (thousandsPlaceHolder >= 1) {
+      int roundedData = thousandsPlaceHolder/1;
       CircuitPlayground.speaker.say(digits[roundedData]);
     } 
     
     CircuitPlayground.speaker.say(spTHOUSAND);
 
-    //Subtract 1000 from score for future references
-    score = score-1000;
+    //Subtract 1000*thousandsPlaceHolder from score for future references
+    score = score-1000*thousandsPlaceHolder;
 
     //Set off zeroFlag to indicate zero need not be said
     zeroFlag = 1;
@@ -1615,13 +1643,6 @@ void generateMIDI()
 }
 
 //To make defining difficulties easy, the following formula was used for indices: (measure#)*(beat#)+4. For example, beat 1 of measure 1 is 5.
-
-void defineEasy() {
-  
-}
-
-void defineHard() {
-}
 
 void defineDemon() {
   //For loop goes through every element of spearOfJustice. All odd beats are right, all left beats are left.
